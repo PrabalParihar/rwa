@@ -30,7 +30,4 @@ const UserSchema: Schema = new Schema(
   }
 );
 
-// Index for faster wallet lookups
-UserSchema.index({ wallet: 1 });
-
 export const User = mongoose.model<IUser>('User', UserSchema);

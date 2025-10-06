@@ -81,7 +81,6 @@ export default function Debtor() {
     }
 
     try {
-      console.log('💰 Step 1: Approving USDC...');
       const amountWei = parseUnits(amount, 6);
 
       const hash = await approveUSDC({
@@ -91,18 +90,28 @@ export default function Debtor() {
         args: [CONTRACTS.RWA_VAULT, amountWei],
       });
 
-      console.log('Transaction hash:', hash);
+      if (!hash) {
+        alert('Transaction failed');
+        return;
+      }
 
-      console.log('💰 Step 2: Waiting for confirmation...');
-      await publicClient.waitForTransactionReceipt({ hash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-      console.log('💰 Step 3: Refreshing allowance...');
-      await refetchAllowance();
+      if (receipt.status !== 'success') {
+        alert('Transaction failed');
+        return;
+      }
 
-      alert(`✅ USDC approved successfully!\n\nYou can now repay the invoice.`);
+      // wait for state to update
+      setTimeout(async () => {
+        await refetchAllowance();
+        setTimeout(() => refetchAllowance(), 500);
+      }, 1000);
+
+      alert('USDC approved! You can now repay.');
     } catch (error: any) {
-      console.error('❌ Error approving USDC:', error);
-      alert(`Failed to approve USDC: ${error.message || error.shortMessage}`);
+      console.error('Error:', error);
+      alert(error.shortMessage || error.message || 'Failed to approve');
     }
   };
 
@@ -115,21 +124,19 @@ export default function Debtor() {
     try {
       const amountWei = parseUnits(amount, 6);
 
-      // Check allowance
-      if (!usdcAllowance || usdcAllowance < amountWei) {
-        alert(`⚠️ Insufficient USDC allowance.\n\nPlease approve USDC first.`);
+      // check allowance
+      const { data: currentAllowance } = await refetchAllowance();
+
+      if (!currentAllowance || currentAllowance < amountWei) {
+        alert(`Insufficient allowance. Please approve USDC first.`);
         return;
       }
 
-      // Find the invoice
       const invoice = invoices.find(inv => inv.tokenId === tokenId);
       if (!invoice) {
         alert('Invoice not found');
         return;
       }
-
-      console.log('💸 Step 1: Submitting repayment transaction...');
-      console.log('Token ID:', tokenId, 'Amount:', amount, 'USDC');
 
       const hash = await repayInvoice({
         address: CONTRACTS.RWA_VAULT,
@@ -138,52 +145,30 @@ export default function Debtor() {
         args: [BigInt(tokenId), amountWei],
       });
 
-      console.log('Transaction hash:', hash);
-
       if (!hash) {
-        throw new Error('Transaction failed - no hash returned');
+        alert('Transaction failed');
+        return;
       }
 
-      console.log('💸 Step 2: Waiting for blockchain confirmation...');
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      console.log('Receipt status:', receipt.status);
 
       if (receipt.status !== 'success') {
-        throw new Error('Transaction reverted on blockchain');
+        alert('Transaction failed');
+        return;
       }
 
-      console.log('💸 Step 3: Updating backend status to "repaid"...');
-      // Update invoice status in backend
+      // update backend
       await axios.patch(`${BACKEND_URL}/invoice/${invoice.id}`, {
         status: 'repaid',
       });
 
-      console.log('💸 Step 4: Refreshing invoice list...');
       await fetchInvoices();
-
-      // Clear repay amount
       setRepayAmount(prev => ({ ...prev, [tokenId]: '' }));
 
-      alert(`✅ Invoice repaid successfully!\n\nTransaction: ${hash}\nAmount: ${amount} USDC`);
+      alert(`Invoice repaid successfully!`);
     } catch (error: any) {
-      console.error('❌ Error repaying invoice:', error);
-
-      let errorMessage = 'Failed to repay invoice.\n\n';
-      if (error.message?.includes('user rejected')) {
-        errorMessage += 'You rejected the transaction.';
-      } else if (error.message?.includes('not financed')) {
-        errorMessage += '⚠️ This invoice has not been financed yet.';
-      } else if (error.message?.includes('fully repaid')) {
-        errorMessage += '⚠️ This invoice is already fully repaid.';
-      } else if (error.response?.data) {
-        errorMessage += `Backend error: ${JSON.stringify(error.response.data)}`;
-      } else if (error.shortMessage) {
-        errorMessage += `Error: ${error.shortMessage}`;
-      } else if (error.message) {
-        errorMessage += `Error: ${error.message}`;
-      }
-
-      alert(errorMessage);
+      console.error('Error:', error);
+      alert(error.shortMessage || error.message || 'Failed to repay invoice');
     }
   };
 
@@ -210,38 +195,30 @@ export default function Debtor() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <h1 className="text-4xl font-bold text-gray-900 mb-8">Debtor Portal</h1>
+    <div className="max-w-6xl mx-auto px-4 py-6">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Debtor Portal</h1>
 
-      {/* USDC Balance Card */}
-      <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md p-6 text-white mb-8">
-        <h3 className="text-lg font-medium mb-2">Your USDC Balance</h3>
-        <div className="text-4xl font-bold">${formatAmount(usdcBalance)} USDC</div>
+      <div className="bg-blue-500 rounded-lg shadow p-6 text-white mb-6">
+        <h3 className="text-lg font-semibold mb-2">Your USDC Balance</h3>
+        <div className="text-4xl font-bold">${formatAmount(usdcBalance)}</div>
         <div className="text-sm mt-2 opacity-90">
-          Allowance for Vault: ${formatAmount(usdcAllowance)} USDC
+          Vault Allowance: ${formatAmount(usdcAllowance)}
         </div>
       </div>
 
-      {/* Instructions */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-8">
-        <h3 className="text-lg font-semibold text-yellow-900 mb-3">📋 How to Repay an Invoice</h3>
-        <ol className="text-sm text-yellow-800 space-y-2 list-decimal list-inside">
-          <li>Find the invoice you need to repay in the table below</li>
-          <li>Enter the repayment amount (can be partial or full)</li>
-          <li>Click "Approve USDC" to allow the vault to receive your payment</li>
-          <li>Click "Repay" to complete the payment</li>
-          <li>Once fully repaid, the invoice status will update to "repaid"</li>
-        </ol>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <p className="text-sm text-blue-900">
+          <span className="font-semibold">To repay:</span> Enter amount → Click Approve → Click Repay
+        </p>
       </div>
 
-      {/* Invoices List */}
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-semibold text-gray-900">Financed Invoices to Repay</h2>
+      <div className="bg-white shadow-md rounded-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-semibold">Invoices to Repay</h2>
           <button
             onClick={fetchInvoices}
             disabled={isLoading}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 disabled:opacity-50 transition-colors"
+            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 disabled:opacity-50"
           >
             {isLoading ? 'Refreshing...' : 'Refresh'}
           </button>
@@ -251,28 +228,28 @@ export default function Debtor() {
           <p className="text-gray-500 text-center py-8">No invoices to repay</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Invoice ID</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Token ID</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Amount (USDC)</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Due Date</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Repay Amount</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
+            <table className="min-w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Invoice ID</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Token ID</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Amount (USDC)</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Due Date</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Repay Amount</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {invoices.map((invoice) => (
-                  <tr key={invoice.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-mono text-sm">{invoice.id}</td>
-                    <td className="py-3 px-4 font-mono text-sm">
+                  <tr key={invoice.id} className="border-b hover:bg-gray-50">
+                    <td className="py-3 px-4 text-sm font-mono">{invoice.id}</td>
+                    <td className="py-3 px-4 text-sm">
                       {invoice.tokenId !== undefined ? `#${invoice.tokenId}` : 'N/A'}
                     </td>
                     <td className="py-3 px-4 font-semibold text-blue-600">
                       ${invoice.amount.toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-gray-600">
+                    <td className="py-3 px-4 text-sm text-gray-600">
                       {invoice.dueDate
                         ? new Date(invoice.dueDate).toLocaleDateString()
                         : 'N/A'}
@@ -288,32 +265,30 @@ export default function Debtor() {
                           }))
                         }
                         placeholder={`Max: ${invoice.amount}`}
-                        className="w-32 px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                        className="w-32 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       />
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex gap-2">
-                        {invoice.tokenId !== undefined && repayAmount[invoice.tokenId] ? (
-                          <>
-                            <button
-                              onClick={() => handleApproveUSDC(repayAmount[invoice.tokenId!])}
-                              disabled={isApprovePending}
-                              className="bg-yellow-600 text-white px-3 py-1 rounded text-sm font-medium hover:bg-yellow-700 disabled:opacity-50 transition-colors"
-                            >
-                              {isApprovePending ? 'Approving...' : 'Approve USDC'}
-                            </button>
-                            <button
-                              onClick={() => handleRepayInvoice(invoice.tokenId!, repayAmount[invoice.tokenId!])}
-                              disabled={isRepayPending}
-                              className="bg-green-600 text-white px-3 py-1 rounded text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
-                            >
-                              {isRepayPending ? 'Repaying...' : 'Repay'}
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-400">Enter amount</span>
-                        )}
-                      </div>
+                      {invoice.tokenId !== undefined && repayAmount[invoice.tokenId] ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleApproveUSDC(repayAmount[invoice.tokenId!])}
+                            disabled={isApprovePending}
+                            className="bg-yellow-500 text-white px-3 py-1.5 rounded text-sm hover:bg-yellow-600 disabled:opacity-50"
+                          >
+                            {isApprovePending ? 'Approving...' : 'Approve'}
+                          </button>
+                          <button
+                            onClick={() => handleRepayInvoice(invoice.tokenId!, repayAmount[invoice.tokenId!])}
+                            disabled={isRepayPending}
+                            className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                          >
+                            {isRepayPending ? 'Repaying...' : 'Repay'}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">Enter amount first</span>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -78,6 +78,12 @@ export default function Admin() {
   const { isLoading: isFinanceLoading, isSuccess: isFinanceSuccess } =
     useWaitForTransactionReceipt({ hash: financeHash });
 
+  // Write contract for setting InvoiceNFT
+  const {
+    writeContractAsync: setInvoiceNFT,
+    isPending: isSetNFTPending
+  } = useWriteContract();
+
   // Fetch invoices from backend
   const fetchInvoices = async () => {
     setIsLoading(true);
@@ -108,15 +114,10 @@ export default function Admin() {
     }
 
     try {
-      console.log('Step 1: Converting inputs...');
-      // Convert inputs
-      const faceValueBigInt = parseUnits(faceValue, 6); // USDC has 6 decimals
+      const faceValueBigInt = parseUnits(faceValue, 6);
       const dueDateTimestamp = Math.floor(new Date(dueDate).getTime() / 1000);
       const debtorHash = keccak256(toBytes(debtorId));
-      console.log('Inputs:', { faceValueBigInt, dueDateTimestamp, debtorHash });
 
-      console.log('Step 2: Minting NFT on blockchain...');
-      // Mint NFT on blockchain
       const hash = await mintInvoice({
         address: INVOICE_NFT_ADDRESS,
         abi: INVOICE_NFT_ABI,
@@ -124,23 +125,19 @@ export default function Admin() {
         args: [recipientAddress as `0x${string}`, faceValueBigInt, BigInt(dueDateTimestamp), debtorHash],
       });
 
-      console.log('Transaction hash:', hash);
-
       if (!hash) {
-        throw new Error('Transaction failed - no hash returned');
+        alert('Transaction failed');
+        return;
       }
 
-      console.log('Step 3: Waiting for transaction receipt...');
-      // Wait for transaction receipt
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      console.log('Receipt received:', receipt.status);
 
       if (receipt.status !== 'success') {
-        throw new Error('Transaction reverted on blockchain');
+        alert('Transaction failed');
+        return;
       }
 
-      console.log('Step 4: Parsing InvoiceMinted event...');
-      // Parse InvoiceMinted event to get tokenId
+      // get tokenId from event
       let tokenId: number | undefined;
       for (const log of receipt.logs) {
         try {
@@ -152,22 +149,15 @@ export default function Admin() {
 
           if (decodedLog.eventName === 'InvoiceMinted') {
             tokenId = Number(decodedLog.args.tokenId);
-            console.log('TokenId extracted from event:', tokenId);
             break;
           }
         } catch (e) {
-          // Skip logs that don't match our ABI
           continue;
         }
       }
 
-      if (tokenId === undefined) {
-        console.warn('Could not extract tokenId from event, continuing anyway...');
-      }
-
-      console.log('Step 5: Saving to backend database...');
-      // Save to backend database with tokenId
-      const backendResponse = await axios.post(`${BACKEND_URL}/invoice/create`, {
+      // save to backend
+      await axios.post(`${BACKEND_URL}/invoice/create`, {
         id: `INV-${Date.now()}`,
         amount: parseFloat(faceValue),
         status: 'pending',
@@ -177,21 +167,16 @@ export default function Admin() {
         tokenId: tokenId,
       });
 
-      console.log('Backend response:', backendResponse.data);
-
-      console.log('Step 6: Refreshing invoice list...');
-      // Refresh invoice list
       await fetchInvoices();
 
-      // Clear form
       setRecipientAddress('');
       setFaceValue('');
       setDueDate('');
       setDebtorId('');
 
-      alert(`✅ Invoice NFT minted successfully!\n\nTransaction: ${hash}\nToken ID: ${tokenId}`);
+      alert(`Invoice minted! Token ID: ${tokenId}`);
     } catch (error: any) {
-      console.error('❌ Error minting invoice:', error);
+      console.error('Error:', error);
 
       // More detailed error message
       let errorMessage = 'Failed to mint invoice. ';
@@ -203,6 +188,48 @@ export default function Admin() {
       }
 
       alert(errorMessage);
+    }
+  };
+
+  // Handle set InvoiceNFT
+  const handleSetInvoiceNFT = async () => {
+    if (!publicClient) {
+      alert('Please connect your wallet');
+      return;
+    }
+
+    try {
+      const hash = await setInvoiceNFT({
+        address: CONTRACTS.RWA_VAULT,
+        abi: [
+          {
+            inputs: [{ name: '_invoiceNFT', type: 'address' }],
+            name: 'setInvoiceNFT',
+            outputs: [],
+            stateMutability: 'nonpayable',
+            type: 'function',
+          }
+        ],
+        functionName: 'setInvoiceNFT',
+        args: [INVOICE_NFT_ADDRESS],
+      });
+
+      if (!hash) {
+        alert('Transaction failed');
+        return;
+      }
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+      if (receipt.status !== 'success') {
+        alert('Transaction failed');
+        return;
+      }
+
+      alert(`InvoiceNFT address set successfully!`);
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert(error.shortMessage || error.message || 'Failed to set InvoiceNFT address');
     }
   };
 
@@ -219,18 +246,12 @@ export default function Admin() {
     }
 
     try {
-      console.log('🏦 Step 1: Financing invoice with Token ID:', tokenId);
-      console.log('Vault address:', CONTRACTS.RWA_VAULT);
-      console.log('Your wallet:', address);
-
-      // Find the invoice by tokenId
       const invoice = invoices.find(inv => inv.tokenId === tokenId);
       if (!invoice) {
         alert('Invoice not found');
         return;
       }
 
-      console.log('🏦 Step 2: Submitting finance transaction...');
       const hash = await financeInvoice({
         address: CONTRACTS.RWA_VAULT,
         abi: RWA_VAULT_ABI,
@@ -238,64 +259,38 @@ export default function Admin() {
         args: [BigInt(tokenId)],
       });
 
-      console.log('Transaction hash:', hash);
-
       if (!hash) {
-        throw new Error('Transaction failed - no hash returned');
+        alert('Transaction failed');
+        return;
       }
 
-      console.log('🏦 Step 3: Waiting for blockchain confirmation...');
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      console.log('Receipt status:', receipt.status);
 
       if (receipt.status !== 'success') {
-        throw new Error('Transaction reverted on blockchain');
+        alert('Transaction failed');
+        return;
       }
 
-      console.log('🏦 Step 4: Updating backend status to "financed"...');
-      // Update invoice status in backend
       await axios.patch(`${BACKEND_URL}/invoice/${invoice.id}`, {
         status: 'financed',
       });
 
-      console.log('🏦 Step 5: Refreshing invoice list...');
-      // Refresh invoice list
       await fetchInvoices();
 
-      alert(`✅ Invoice financed successfully!\n\nTransaction: ${hash}\nToken ID: ${tokenId}`);
+      alert(`Invoice financed! Token ID: ${tokenId}`);
     } catch (error: any) {
-      console.error('❌ Error financing invoice:', error);
-
-      let errorMessage = 'Failed to finance invoice.\n\n';
-
-      // Check for common errors
-      if (error.message?.includes('user rejected')) {
-        errorMessage += 'You rejected the transaction.';
-      } else if (error.message?.includes('Ownable')) {
-        errorMessage += '⚠️ You are not the vault owner.\n\nOnly the owner can finance invoices.';
-      } else if (error.message?.includes('insufficient')) {
-        errorMessage += '⚠️ Vault has insufficient USDC balance.\n\nPlease deposit USDC to the vault first.';
-      } else if (error.message?.includes('already financed')) {
-        errorMessage += '⚠️ This invoice is already financed.';
-      } else if (error.response?.data) {
-        errorMessage += `Backend error: ${JSON.stringify(error.response.data)}`;
-      } else if (error.shortMessage) {
-        errorMessage += `Error: ${error.shortMessage}`;
-      } else if (error.message) {
-        errorMessage += `Error: ${error.message}`;
-      }
-
-      alert(errorMessage);
+      console.error('Error:', error);
+      alert(error.shortMessage || error.message || 'Failed to finance invoice');
     }
   };
 
   if (!isConnected) {
     return (
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Admin Panel</h1>
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-lg shadow p-8 text-center">
+          <h1 className="text-3xl font-bold mb-4">Admin Panel</h1>
           <p className="text-gray-600 mb-6">
-            Please connect your wallet to access the admin panel.
+            Connect your wallet to access admin functions
           </p>
           <ConnectButton />
         </div>
@@ -304,16 +299,30 @@ export default function Admin() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <h1 className="text-4xl font-bold text-gray-900 mb-8">Admin Panel</h1>
+    <div className="max-w-6xl mx-auto px-4 py-6">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Admin Panel</h1>
 
-      {/* Mint Invoice NFT Form */}
-      <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-        <h2 className="text-2xl font-semibold text-gray-900 mb-6">Mint Invoice NFT</h2>
+      {/* Setup Section */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-3">⚙️ Initial Setup</h2>
+        <p className="text-sm text-gray-700 mb-4">
+          Before financing invoices, you must set the InvoiceNFT address in the vault. This only needs to be done once.
+        </p>
+        <button
+          onClick={handleSetInvoiceNFT}
+          disabled={isSetNFTPending}
+          className="bg-orange-600 text-white px-6 py-2.5 rounded hover:bg-orange-700 disabled:opacity-50"
+        >
+          {isSetNFTPending ? 'Setting...' : 'Set InvoiceNFT Address'}
+        </button>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-2xl font-semibold mb-6">Mint Invoice NFT</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium mb-2">
               Recipient Address
             </label>
             <input
@@ -321,12 +330,12 @@ export default function Admin() {
               value={recipientAddress}
               onChange={(e) => setRecipientAddress(e.target.value)}
               placeholder="0x..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium mb-2">
               Face Value (USDC)
             </label>
             <input
@@ -334,24 +343,24 @@ export default function Admin() {
               value={faceValue}
               onChange={(e) => setFaceValue(e.target.value)}
               placeholder="1000"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium mb-2">
               Due Date
             </label>
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium mb-2">
               Debtor ID
             </label>
             <input
@@ -359,7 +368,7 @@ export default function Admin() {
               value={debtorId}
               onChange={(e) => setDebtorId(e.target.value)}
               placeholder="Company XYZ"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -367,7 +376,7 @@ export default function Admin() {
         <button
           onClick={handleMintInvoice}
           disabled={isMintPending || isMintLoading}
-          className="w-full bg-primary-600 text-white py-3 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-blue-600 text-white py-2.5 rounded hover:bg-blue-700 disabled:opacity-50"
         >
           {isMintPending || isMintLoading ? 'Minting...' : 'Mint Invoice NFT'}
         </button>
@@ -386,30 +395,22 @@ export default function Admin() {
         </div>
       )}
 
-      {/* Invoice List */}
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-semibold text-gray-900">Invoice Tracking</h2>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-semibold">Invoice Tracking</h2>
           <button
             onClick={fetchInvoices}
             disabled={isLoading}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 disabled:opacity-50 transition-colors"
+            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 disabled:opacity-50"
           >
-            {isLoading ? 'Refreshing...' : 'Refresh'}
+            {isLoading ? 'Loading...' : 'Refresh'}
           </button>
         </div>
 
-        {/* Invoice Lifecycle Info */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="text-sm font-semibold text-blue-900 mb-2">Invoice Lifecycle:</h3>
-          <div className="text-xs text-blue-800 space-y-1">
-            <p><strong>Pending:</strong> Invoice NFT minted, waiting for vault to finance</p>
-            <p><strong>Financed:</strong> Vault has funded the invoice (via <code>financeInvoice()</code>)</p>
-            <p><strong>Repaid:</strong> Debtor has repaid the invoice (via <code>repayInvoice()</code>)</p>
-            <p><strong>Defaulted:</strong> Invoice past due date without full repayment</p>
-          </div>
-          <p className="text-xs text-blue-700 mt-2 italic">
-            Status is automatically updated based on blockchain transactions. Manual editing is not supported.
+        <div className="mb-5 p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
+          <p className="text-sm font-semibold text-blue-900 mb-1">Invoice Lifecycle</p>
+          <p className="text-xs text-blue-800">
+            Pending → Financed → Repaid/Defaulted (status updates automatically from blockchain)
           </p>
         </div>
 
@@ -417,15 +418,15 @@ export default function Admin() {
           <p className="text-gray-500 text-center py-8">No invoices found</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Invoice ID</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Token ID</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Amount (USDC)</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Recipient</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Due Date</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+            <table className="min-w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left py-3 px-4 text-sm font-semibold">Invoice ID</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold">Token ID</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold">Amount (USDC)</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold">Recipient</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold">Due Date</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold">Status</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>

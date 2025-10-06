@@ -57,8 +57,6 @@ const InvoiceSchema: Schema = new Schema(
   }
 );
 
-// Index for faster id lookups
-InvoiceSchema.index({ id: 1 });
 InvoiceSchema.index({ status: 1 });
 
 export const Invoice = mongoose.model<IInvoice>('Invoice', InvoiceSchema);

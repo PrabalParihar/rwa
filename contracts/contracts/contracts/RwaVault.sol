@@ -38,9 +38,13 @@ contract RwaVault is Ownable, ReentrancyGuard {
     uint256 public seniorYieldPaid; // Total yield paid to senior tranche
     uint256 public lastDistributionTime; // Timestamp of last distribution
 
-    // Claimable amounts per user per tranche
-    mapping(address => uint256) public seniorClaimable;
-    mapping(address => uint256) public juniorClaimable;
+    // Reward per share tracking (scaled by 1e18 for precision)
+    uint256 public seniorRewardPerShare;
+    uint256 public juniorRewardPerShare;
+
+    // User reward debt tracking
+    mapping(address => uint256) public seniorRewardDebt;
+    mapping(address => uint256) public juniorRewardDebt;
 
     // Invoice financing tracking
     mapping(uint256 => bool) public invoiceFinanced; // tokenId => financed
@@ -121,12 +125,24 @@ contract RwaVault is Ownable, ReentrancyGuard {
 
         // Mint tranche tokens (1:1 with net USDC deposited)
         if (toSenior) {
+            // Claim any pending rewards before changing balance
+            _updateRewards(msg.sender, true);
+
             totalSeniorShares += netAmount;
             seniorPrincipal += netAmount; // Track senior principal for waterfall
             seniorToken.mint(msg.sender, netAmount);
+
+            // Update reward debt
+            seniorRewardDebt[msg.sender] = (seniorToken.balanceOf(msg.sender) * seniorRewardPerShare) / 1e18;
         } else {
+            // Claim any pending rewards before changing balance
+            _updateRewards(msg.sender, false);
+
             totalJuniorShares += netAmount;
             juniorToken.mint(msg.sender, netAmount);
+
+            // Update reward debt
+            juniorRewardDebt[msg.sender] = (juniorToken.balanceOf(msg.sender) * juniorRewardPerShare) / 1e18;
         }
 
         emit Deposited(msg.sender, toSenior, amount, fee, netAmount);
@@ -159,14 +175,23 @@ contract RwaVault is Ownable, ReentrancyGuard {
             "RwaVault: insufficient vault balance"
         );
 
+        // Claim any pending rewards before changing balance
+        _updateRewards(msg.sender, fromSenior);
+
         // Burn tranche tokens
         if (fromSenior) {
             seniorToken.burn(msg.sender, shares);
             totalSeniorShares -= shares;
             seniorPrincipal -= shares; // Reduce senior principal tracking
+
+            // Update reward debt
+            seniorRewardDebt[msg.sender] = (seniorToken.balanceOf(msg.sender) * seniorRewardPerShare) / 1e18;
         } else {
             juniorToken.burn(msg.sender, shares);
             totalJuniorShares -= shares;
+
+            // Update reward debt
+            juniorRewardDebt[msg.sender] = (juniorToken.balanceOf(msg.sender) * juniorRewardPerShare) / 1e18;
         }
 
         // Update AUM
@@ -235,7 +260,7 @@ contract RwaVault is Ownable, ReentrancyGuard {
 
     /**
      * @notice Internal function to distribute yield to a tranche
-     * @dev Updates claimable amounts for all holders pro-rata
+     * @dev Updates reward per share for pro-rata distribution
      * @param amount Amount to distribute
      * @param totalShares Total shares in the tranche
      * @param isSenior True for senior, false for junior
@@ -245,17 +270,19 @@ contract RwaVault is Ownable, ReentrancyGuard {
         uint256 totalShares,
         bool isSenior
     ) internal {
-        // Note: In production, you'd track each holder and their share
-        // For MVP, we'll use a simpler approach where users can calculate their share
-        // based on their token balance / total supply
+        if (totalShares == 0) return;
 
-        // Store the distribution globally - users claim based on their share
+        // Update reward per share (scaled by 1e18 for precision)
+        uint256 rewardPerShareIncrease = (amount * 1e18) / totalShares;
+
         if (isSenior) {
-            // Proportional distribution stored for claiming
-            assetsUnderManagement += amount;
+            seniorRewardPerShare += rewardPerShareIncrease;
         } else {
-            assetsUnderManagement += amount;
+            juniorRewardPerShare += rewardPerShareIncrease;
         }
+
+        // Add to AUM (rewards are now in the vault)
+        assetsUnderManagement += amount;
     }
 
     /**
@@ -263,16 +290,14 @@ contract RwaVault is Ownable, ReentrancyGuard {
      * @param isSenior True to claim from senior tranche, false for junior
      */
     function claim(bool isSenior) external nonReentrant {
-        uint256 claimable;
+        uint256 claimable = _getPendingRewards(msg.sender, isSenior);
+        require(claimable > 0, "RwaVault: nothing to claim");
 
+        // Update reward debt to current
         if (isSenior) {
-            claimable = seniorClaimable[msg.sender];
-            require(claimable > 0, "RwaVault: nothing to claim");
-            seniorClaimable[msg.sender] = 0;
+            seniorRewardDebt[msg.sender] = (seniorToken.balanceOf(msg.sender) * seniorRewardPerShare) / 1e18;
         } else {
-            claimable = juniorClaimable[msg.sender];
-            require(claimable > 0, "RwaVault: nothing to claim");
-            juniorClaimable[msg.sender] = 0;
+            juniorRewardDebt[msg.sender] = (juniorToken.balanceOf(msg.sender) * juniorRewardPerShare) / 1e18;
         }
 
         usdc.safeTransfer(msg.sender, claimable);
@@ -287,7 +312,42 @@ contract RwaVault is Ownable, ReentrancyGuard {
      * @return Claimable amount in USDC
      */
     function getClaimable(address user, bool isSenior) external view returns (uint256) {
-        return isSenior ? seniorClaimable[user] : juniorClaimable[user];
+        return _getPendingRewards(user, isSenior);
+    }
+
+    /**
+     * @notice Internal helper to calculate pending rewards
+     * @param user User address
+     * @param isSenior True for senior tranche
+     * @return Pending rewards in USDC
+     */
+    function _getPendingRewards(address user, bool isSenior) internal view returns (uint256) {
+        if (isSenior) {
+            uint256 userBalance = seniorToken.balanceOf(user);
+            if (userBalance == 0) return 0;
+            uint256 accumulatedRewards = (userBalance * seniorRewardPerShare) / 1e18;
+            if (accumulatedRewards <= seniorRewardDebt[user]) return 0;
+            return accumulatedRewards - seniorRewardDebt[user];
+        } else {
+            uint256 userBalance = juniorToken.balanceOf(user);
+            if (userBalance == 0) return 0;
+            uint256 accumulatedRewards = (userBalance * juniorRewardPerShare) / 1e18;
+            if (accumulatedRewards <= juniorRewardDebt[user]) return 0;
+            return accumulatedRewards - juniorRewardDebt[user];
+        }
+    }
+
+    /**
+     * @notice Internal helper to update and transfer pending rewards
+     * @param user User address
+     * @param isSenior True for senior tranche
+     */
+    function _updateRewards(address user, bool isSenior) internal {
+        uint256 pending = _getPendingRewards(user, isSenior);
+        if (pending > 0) {
+            usdc.safeTransfer(user, pending);
+            emit Claimed(user, isSenior, pending);
+        }
     }
 
     /**

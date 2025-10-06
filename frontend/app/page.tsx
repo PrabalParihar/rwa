@@ -35,56 +35,52 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <h1 className="text-4xl font-bold text-gray-900 mb-8">Dashboard</h1>
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
 
-      {/* Faucet Banner */}
-      <div className="bg-gradient-to-r from-primary-500 to-blue-500 rounded-lg shadow-lg p-6 mb-8 text-white">
+      <div className="bg-blue-600 rounded-lg shadow p-5 mb-6 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold mb-2">💧 Need Test USDC?</h2>
-            <p className="text-primary-100">
-              Get free test USDC tokens to try out all platform features on Sepolia testnet
+            <h2 className="text-xl font-bold mb-1">Need Test USDC?</h2>
+            <p className="text-sm">
+              Get free test tokens for Sepolia testnet
             </p>
           </div>
           <a
             href="/faucet"
-            className="bg-white text-primary-600 px-6 py-3 rounded-lg font-semibold hover:bg-primary-50 transition-colors"
+            className="bg-white text-blue-600 px-4 py-2 rounded font-semibold hover:bg-gray-100"
           >
-            Go to Faucet →
+            Faucet →
           </a>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Total Value Locked */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-primary-500">
-          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+        <div className="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
+          <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">
             Total Value Locked
           </h3>
-          <p className="text-3xl font-bold text-gray-900">
+          <p className="text-3xl font-bold">
             ${formatAmount(tvl)}
           </p>
           <p className="text-sm text-gray-500 mt-1">USDC</p>
         </div>
 
-        {/* Senior Tranche */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">
-            Senior Tranche Supply
+        <div className="bg-white rounded-lg shadow p-5 border-l-4 border-green-500">
+          <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">
+            Senior Tranche
           </h3>
-          <p className="text-3xl font-bold text-gray-900">
+          <p className="text-3xl font-bold">
             ${formatAmount(seniorSupply)}
           </p>
           <p className="text-sm text-gray-500 mt-1">Fixed 8% APY</p>
         </div>
 
-        {/* Junior Tranche */}
-        <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">
-            Junior Tranche Supply
+        <div className="bg-white rounded-lg shadow p-5 border-l-4 border-orange-500">
+          <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">
+            Junior Tranche
           </h3>
-          <p className="text-3xl font-bold text-gray-900">
+          <p className="text-3xl font-bold">
             ${formatAmount(juniorSupply)}
           </p>
           <p className="text-sm text-gray-500 mt-1">Variable Returns</p>

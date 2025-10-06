@@ -74,11 +74,11 @@ export default function Faucet() {
 
   if (!isConnected) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">USDC Faucet</h1>
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-lg shadow p-6 text-center">
+          <h1 className="text-3xl font-bold mb-4">USDC Faucet</h1>
           <p className="text-gray-600 mb-6">
-            Please connect your wallet to get test USDC tokens.
+            Connect your wallet to get test USDC.
           </p>
           <ConnectButton />
         </div>
@@ -87,31 +87,29 @@ export default function Faucet() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-4xl font-bold text-gray-900 mb-8">USDC Faucet</h1>
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <h1 className="text-3xl font-bold mb-6">USDC Faucet</h1>
 
-      <div className="bg-white rounded-lg shadow-md p-8 mb-6">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-semibold text-gray-900">Get Test USDC</h2>
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xl font-semibold">Get Test USDC</h2>
             <div className="text-right">
               <p className="text-sm text-gray-600">Your Balance</p>
-              <p className="text-2xl font-bold text-primary-600">
+              <p className="text-2xl font-bold text-blue-600">
                 {usdcBalance ? formatUnits(usdcBalance, 6) : '0.00'} USDC
               </p>
             </div>
           </div>
 
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-6">
-            <h3 className="text-sm font-semibold text-blue-900 mb-2">💡 About the Faucet</h3>
-            <p className="text-xs text-blue-800">
-              This is a test USDC faucet on Sepolia testnet. You can mint any amount of USDC to test
-              the RWA platform features including deposits, investments, and invoice financing.
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded mb-5">
+            <p className="text-sm text-blue-900">
+              Mint test USDC on Sepolia for deposits, investments, and invoice financing.
             </p>
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="mb-5">
+            <label className="block text-sm font-medium mb-2">
               Amount (USDC)
             </label>
             <input
@@ -119,110 +117,88 @@ export default function Faucet() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="1000"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-sm text-gray-500 mt-2">
-              Recommended: 1000-10000 USDC for testing
+              Recommended: 1000-10000 USDC
             </p>
           </div>
 
           <button
             onClick={handleMint}
             disabled={isMintPending || isMintLoading || isMinting}
-            className="w-full bg-primary-600 text-white py-3 rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full bg-blue-600 text-white py-2.5 rounded hover:bg-blue-700 disabled:opacity-50"
           >
             {isMintPending || isMintLoading || isMinting ? 'Minting...' : 'Mint USDC'}
           </button>
 
           {isMintSuccess && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
-              ✅ Successfully minted {amount} USDC! Your balance has been updated.
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-800 text-sm">
+              Successfully minted {amount} USDC!
             </div>
           )}
 
           {mintError && (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-              ❌ Error minting USDC. Please try again.
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
+              Error minting USDC. Please try again.
             </div>
           )}
         </div>
 
         {/* Quick Actions */}
-        <div className="border-t border-gray-200 pt-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="border-t pt-5">
+          <h3 className="text-lg font-semibold mb-4">Quick Amounts</h3>
+          <div className="grid grid-cols-3 gap-3">
             <button
               onClick={() => setAmount('1000')}
-              className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+              className="px-3 py-2 border-2 border-gray-300 rounded hover:border-blue-500 hover:bg-blue-50"
             >
-              <div className="font-semibold">1,000 USDC</div>
-              <div className="text-xs text-gray-600">Small Test</div>
+              <div className="font-semibold">1,000</div>
+              <div className="text-xs text-gray-600">Small</div>
             </button>
 
             <button
               onClick={() => setAmount('5000')}
-              className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+              className="px-3 py-2 border-2 border-gray-300 rounded hover:border-blue-500 hover:bg-blue-50"
             >
-              <div className="font-semibold">5,000 USDC</div>
-              <div className="text-xs text-gray-600">Medium Test</div>
+              <div className="font-semibold">5,000</div>
+              <div className="text-xs text-gray-600">Medium</div>
             </button>
 
             <button
               onClick={() => setAmount('10000')}
-              className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+              className="px-3 py-2 border-2 border-gray-300 rounded hover:border-blue-500 hover:bg-blue-50"
             >
-              <div className="font-semibold">10,000 USDC</div>
-              <div className="text-xs text-gray-600">Large Test</div>
+              <div className="font-semibold">10,000</div>
+              <div className="text-xs text-gray-600">Large</div>
             </button>
           </div>
         </div>
       </div>
 
       {/* Next Steps */}
-      <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg shadow-md p-8">
-        <h2 className="text-2xl font-semibold text-gray-900 mb-4">🚀 Next Steps</h2>
-        <div className="space-y-3 text-gray-700">
-          <div className="flex items-start">
-            <span className="font-bold text-primary-600 mr-3">1.</span>
-            <p>
-              <strong>Mint USDC</strong> - Get test tokens using the form above
-            </p>
-          </div>
-          <div className="flex items-start">
-            <span className="font-bold text-primary-600 mr-3">2.</span>
-            <p>
-              <strong>Check KYC Status</strong> - Go to{' '}
-              <a href="/invest" className="text-primary-600 hover:underline">
-                Invest Page
-              </a>{' '}
-              and verify your KYC (auto-approved)
-            </p>
-          </div>
-          <div className="flex items-start">
-            <span className="font-bold text-primary-600 mr-3">3.</span>
-            <p>
-              <strong>Make a Deposit</strong> - Choose Senior (8% APY) or Junior (variable) tranche
-            </p>
-          </div>
-          <div className="flex items-start">
-            <span className="font-bold text-primary-600 mr-3">4.</span>
-            <p>
-              <strong>View Portfolio</strong> - Check your investments at{' '}
-              <a href="/portfolio" className="text-primary-600 hover:underline">
-                Portfolio Page
-              </a>
-            </p>
-          </div>
-          <div className="flex items-start">
-            <span className="font-bold text-primary-600 mr-3">5.</span>
-            <p>
-              <strong>Admin Features</strong> - Mint Invoice NFTs at{' '}
-              <a href="/admin" className="text-primary-600 hover:underline">
-                Admin Page
-              </a>
-            </p>
-          </div>
-        </div>
+      <div className="bg-blue-50 rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4">What's Next</h2>
+        <ul className="space-y-2 text-gray-700">
+          <li>• Check your{' '}
+            <a href="/invest" className="text-blue-600 hover:underline">
+              KYC status
+            </a>{' '}
+            (auto-approved for testing)
+          </li>
+          <li>• Invest in Senior (8% APY) or Junior tranche</li>
+          <li>• View your{' '}
+            <a href="/portfolio" className="text-blue-600 hover:underline">
+              portfolio
+            </a>
+          </li>
+          <li>• Try{' '}
+            <a href="/admin" className="text-blue-600 hover:underline">
+              admin features
+            </a>{' '}
+            for invoice management
+          </li>
+        </ul>
       </div>
     </div>
   );
