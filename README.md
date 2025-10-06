@@ -272,6 +272,12 @@ Addresses are saved in `contracts/deployments/latest.json`
 - Check `MONGO_URL` in `backend/.env`
 - Verify port 4000 is not in use
 
+### Video
+
+https://github.com/user-attachments/assets/c50e7432-10dc-42f9-9fdf-877676fc9000
+
+
+
 ## 🤝 Contributing
 
 This is a demonstration project following the PRD specifications. For improvements:
@@ -289,7 +295,7 @@ MIT
 ## 🎯 Next Steps for Production
 
 1. **Security Audit**: Conduct comprehensive smart contract audit
-2. **Testnet Deployment**: Deploy to Sepolia/Goerli
+2. **Testnet Deployment**: Deploy to Sepolia
 3. **Real KYC Integration**: Integrate with KYC provider (Persona, Onfido, etc.)
 4. **Enhanced Backend**: Add proper authentication, rate limiting, logging
 5. **Analytics**: Add transaction history, APY tracking, charts
